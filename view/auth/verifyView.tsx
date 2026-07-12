@@ -10,7 +10,15 @@ const RESEND_OTP_STORAGE_KEY = "verify_resend_otp_expires_at"
 
 const VerifyView = ({ className, ...props }: React.ComponentProps<"div">) => {
   const [resendTimer, setResendTimer] = useState(RESEND_OTP_SECONDS)
+  const [email, setEmail] = useState("")
 
+  useEffect(() => {
+    const email = window.localStorage.getItem("email")
+    if (email) {
+      setEmail(email)
+    }
+  }, [])
+  
   useEffect(() => {
     const syncTimerFromStorage = () => {
       const storedExpiry = window.localStorage.getItem(RESEND_OTP_STORAGE_KEY)
@@ -54,7 +62,7 @@ const VerifyView = ({ className, ...props }: React.ComponentProps<"div">) => {
         <div className="pb-5">
           <h1 className="pb-2 text-2xl font-semibold">Verify your account </h1>
           <p className="text-sm font-medium text-muted-foreground">
-            we&#39;ve sent a mail to
+            we&#39;ve sent a mail to {email}                          
           </p>
         </div>
         <div className="w-full pt-1">
