@@ -15,10 +15,10 @@ const VerifyView = ({ className, ...props }: React.ComponentProps<"div">) => {
   useEffect(() => {
     const email = window.localStorage.getItem("email")
     if (email) {
-      setEmail(email)
+      setEmail(email as unknown as string)
     }
   }, [])
-  
+
   useEffect(() => {
     const syncTimerFromStorage = () => {
       const storedExpiry = window.localStorage.getItem(RESEND_OTP_STORAGE_KEY)
