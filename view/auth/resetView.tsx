@@ -1,34 +1,35 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { cn } from "@/lib"
+import { useRouter } from "next/navigation"
+import { cn, forgotPassword, resetPassword, AuthApiError, showNotification } from "@/lib"
 import { Button, Input, InputOTP } from "@heroui/react"
 import { FaEye, FaEyeSlash } from "react-icons/fa"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 
 const RESEND_OTP_SECONDS = 60
 const RESEND_OTP_STORAGE_KEY = "reset_resend_otp_expires_at"
-const RESET_OTP_VALUE_STORAGE_KEY = "reset_password_otp_value"
+const EMAIL_STORAGE_KEY = "reset_email"
 
 const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
+  const router = useRouter()
+  const [email] = useState(() =>
+    typeof window === "undefined"
+      ? ""
+      : window.localStorage.getItem(EMAIL_STORAGE_KEY) ?? ""
+  )
   const [resendTimer, setResendTimer] = useState(RESEND_OTP_SECONDS)
+  const [isResending, setIsResending] = useState(false)
+  const [code, setCode] = useState("")
   const [otpError, setOtpError] = useState("")
-  const [isOtpStepComplete, setIsOtpStepComplete] = useState(() => {
-    if (typeof window === "undefined") {
-      return false
-    }
-
-    const savedOtpCode = window.localStorage.getItem(
-      RESET_OTP_VALUE_STORAGE_KEY
-    )
-    return !!savedOtpCode && savedOtpCode.length === 6
-  })
+  const [isOtpStepComplete, setIsOtpStepComplete] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isPasswordFocused, setIsPasswordFocused] = useState(false)
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [passwordError, setPasswordError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const hasMinLength = password.length >= 8
   const hasUppercase = /[A-Z]/.test(password)
   const hasLowercase = /[a-z]/.test(password)
@@ -42,6 +43,12 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
     (!hasMinLength || !hasUppercase || !hasLowercase || !hasNumber)
   const shouldShowPasswordRules =
     isPasswordFocused || hasInvalidPasswordInput || hasConfirmPasswordMismatch
+
+  useEffect(() => {
+    if (!email) {
+      router.replace("/auth/forgot")
+    }
+  }, [email, router])
 
   useEffect(() => {
     const syncTimerFromStorage = () => {
@@ -73,24 +80,33 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
     }
   }, [])
 
-  const handleResendOtp = () => {
-    // Hook your resend API call here.
-    const expiresAt = Date.now() + RESEND_OTP_SECONDS * 1000
-    window.localStorage.setItem(RESEND_OTP_STORAGE_KEY, String(expiresAt))
-    setResendTimer(RESEND_OTP_SECONDS)
+  const handleResendOtp = async () => {
+    if (!email || isResending) return
+    setIsResending(true)
+    try {
+      await forgotPassword({ email })
+      const expiresAt = Date.now() + RESEND_OTP_SECONDS * 1000
+      window.localStorage.setItem(RESEND_OTP_STORAGE_KEY, String(expiresAt))
+      setResendTimer(RESEND_OTP_SECONDS)
+      showNotification({ type: "success", message: "A new code is on its way." })
+    } catch (err) {
+      showNotification({
+        type: "error",
+        message: err instanceof AuthApiError ? err.message : "Couldn't resend the code.",
+      })
+    } finally {
+      setIsResending(false)
+    }
   }
 
   const handleVerifyOtp = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    const otpCode = String(formData.get("otp") ?? "").trim()
 
-    if (otpCode.length !== 6) {
+    if (code.length !== 6) {
       setOtpError("Please enter the 6-digit OTP code.")
       return
     }
 
-    window.localStorage.setItem(RESET_OTP_VALUE_STORAGE_KEY, otpCode)
     setOtpError("")
     setIsOtpStepComplete(true)
   }
@@ -101,17 +117,13 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
     setConfirmPassword("")
     setPasswordError("")
     setIsPasswordFocused(false)
-    window.localStorage.removeItem(RESET_OTP_VALUE_STORAGE_KEY)
   }
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    const savedOtpCode = window.localStorage.getItem(
-      RESET_OTP_VALUE_STORAGE_KEY
-    )
-    if (!savedOtpCode || savedOtpCode.length !== 6) {
-      setPasswordError("OTP not found. Please verify OTP again.")
+    if (code.length !== 6) {
+      setPasswordError("Code not found. Please verify the code again.")
       setIsOtpStepComplete(false)
       return
     }
@@ -128,14 +140,22 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
       return
     }
 
-    // Hook your reset password API call here.
-    console.log("Reset password payload:", {
-      otp: savedOtpCode,
-      password,
-      confirmPassword,
-    })
-
     setPasswordError("")
+    setIsSubmitting(true)
+    try {
+      await resetPassword({ email, code, password })
+      window.localStorage.removeItem(EMAIL_STORAGE_KEY)
+      window.localStorage.removeItem(RESEND_OTP_STORAGE_KEY)
+      showNotification({ type: "success", message: "Password reset." })
+      router.push("/dashboard")
+    } catch (err) {
+      setPasswordError(
+        err instanceof AuthApiError ? err.message : "Something went wrong. Please try again."
+      )
+      setIsOtpStepComplete(false)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -147,7 +167,7 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
         <div className="pb-5">
           <h1 className="pb-2 text-2xl font-semibold">Reset your account </h1>
           <p className="text-sm font-medium text-muted-foreground">
-            we&#39;ve sent a mail to
+            we&#39;ve sent a mail to {email}
           </p>
         </div>
         <div className="w-full pt-1">
@@ -161,10 +181,11 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
                   <Field className="items-center">
                     <div className="flex w-full justify-center">
                       <InputOTP
-                        name="otp"
                         maxLength={6}
                         autoFocus
                         textAlign="center"
+                        value={code}
+                        onChange={setCode}
                       >
                         <InputOTP.Group>
                           <InputOTP.Slot index={0} className="rounded-md" />
@@ -196,7 +217,8 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
                           <button
                             type="button"
                             onClick={handleResendOtp}
-                            className="cursor-pointer font-medium text-foreground hover:text-primary"
+                            disabled={isResending}
+                            className="cursor-pointer font-medium text-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Resend OTP
                           </button>
@@ -216,6 +238,7 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
                         id="password"
                         name="password"
                         type={showPassword ? "text" : "password"}
+                        autoComplete="new-password"
                         placeholder="********"
                         className="h-9 w-full rounded-md pr-9"
                         value={password}
@@ -254,6 +277,7 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
                         id="confirmPassword"
                         name="confirmPassword"
                         type={showConfirmPassword ? "text" : "password"}
+                        autoComplete="new-password"
                         placeholder="********"
                         className="h-9 w-full rounded-md pr-9"
                         value={confirmPassword}
@@ -327,9 +351,10 @@ const ResetView = ({ className, ...props }: React.ComponentProps<"div">) => {
                   <Field className="m-auto w-full items-center pb-4">
                     <Button
                       type="submit"
+                      isDisabled={isSubmitting}
                       className="w-full rounded-md bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
                     >
-                      Reset Password
+                      {isSubmitting ? "Resetting…" : "Reset Password"}
                     </Button>
                     <button
                       type="button"

@@ -41,12 +41,10 @@ cp .env.sample .env.local
 | `NEXT_PUBLIC_HOMEPAGE` | No | Marketing homepage URL |
 | `NEXT_PUBLIC_APP_THEME` | No | Primary theme color (hex) |
 | `NEXT_PUBLIC_HOME_SPLASH_MS` | No | Minimum time (ms) the logo splash shows before session redirect logic runs (default `4000`) |
-| `NEXT_PUBLIC_BETTER_AUTH_URL` | Yes* | Backend auth API origin only, no path (preferred over `NEXT_PUBLIC_AUTH_URL`) |
-| `NEXT_PUBLIC_AUTH_URL` | No | Fallback for `NEXT_PUBLIC_BETTER_AUTH_URL` |
+| `NEXT_PUBLIC_AUTH_URL` | Yes | Backend auth API origin only, no path |
 | `NEXT_PUBLIC_AUTH_BASE_PATH` | No | Auth route base path on the backend (default `/v1/auth`) |
+| `NEXT_PUBLIC_USER_SESSION_PATH` | No | Session-read path on the backend, relative to `NEXT_PUBLIC_AUTH_URL` (default `/v1/user/session`) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No | Cloudflare Turnstile site key (public, no quotes). Add every origin you use (e.g. `localhost:3000` and `127.0.0.1:3000` are different hosts) under the widget's allowed hostnames. |
-
-\* One of `NEXT_PUBLIC_BETTER_AUTH_URL` / `NEXT_PUBLIC_AUTH_URL` is required to reach the backend.
 
 ## Run the project
 
@@ -86,7 +84,7 @@ components/
 ├── ui/                    # shadcn/ui components
 └── theme-provider.tsx
 hooks/                   # Shared React hooks
-lib/                      # Shared utilities (index.ts, showNotification.ts, utils.ts)
+lib/                      # Shared utilities (index.ts, auth.ts, showNotification.ts, utils.ts)
 ```
 
 Routes in `app/` stay thin; page logic and layout live in the corresponding `view/` component.

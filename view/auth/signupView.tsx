@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { cn } from "@/lib"
+import { useRouter } from "next/navigation"
+import { cn, signup, AuthApiError, showNotification } from "@/lib"
 import { Button, Input } from "@heroui/react"
 import { FaEye, FaEyeSlash, FaGithub } from "react-icons/fa"
 import { FcGoogle } from "react-icons/fc"
@@ -13,13 +14,17 @@ import {
 } from "@/components/ui/field"
 import Link from "next/link"
 
+export const SIGNUP_EMAIL_STORAGE_KEY = "email"
+
 const SignupView = ({ className, ...props }: React.ComponentProps<"div">) => {
+  const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isPasswordFocused, setIsPasswordFocused] = useState(false)
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [passwordError, setPasswordError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const hasMinLength = password.length >= 8
   const hasUppercase = /[A-Z]/.test(password)
   const hasLowercase = /[a-z]/.test(password)
@@ -34,9 +39,10 @@ const SignupView = ({ className, ...props }: React.ComponentProps<"div">) => {
   const shouldShowPasswordRules =
     isPasswordFocused || hasInvalidPasswordInput || hasConfirmPasswordMismatch
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
     if (!hasMinLength || !hasUppercase || !hasLowercase || !hasNumber) {
-      event.preventDefault()
       setPasswordError(
         "Password must have at least 8 characters, uppercase, lowercase, and a number."
       )
@@ -44,12 +50,35 @@ const SignupView = ({ className, ...props }: React.ComponentProps<"div">) => {
     }
 
     if (!passwordsMatch) {
-      event.preventDefault()
       setPasswordError("Passwords do not match.")
       return
     }
 
     setPasswordError("")
+
+    const formData = new FormData(event.currentTarget)
+    const firstName = String(formData.get("firstName") ?? "").trim()
+    const lastName = String(formData.get("lastName") ?? "").trim()
+    const email = String(formData.get("email") ?? "").trim()
+
+    setIsSubmitting(true)
+    try {
+      await signup({ name: `${firstName} ${lastName}`.trim(), email, password })
+      window.localStorage.setItem(SIGNUP_EMAIL_STORAGE_KEY, email)
+      showNotification({
+        type: "success",
+        message: "Account created — check your email for a verification code.",
+      })
+      router.push("/auth/verify")
+    } catch (error) {
+      setPasswordError(
+        error instanceof AuthApiError
+          ? error.message
+          : "Something went wrong. Please try again."
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -94,6 +123,7 @@ const SignupView = ({ className, ...props }: React.ComponentProps<"div">) => {
                   id="email"
                   name="email"
                   type="email"
+                  autoComplete="email"
                   placeholder="m@example.com"
                   className="h-9 w-full rounded-md"
                   required
@@ -202,9 +232,10 @@ const SignupView = ({ className, ...props }: React.ComponentProps<"div">) => {
               <Field className="pb-4">
                 <Button
                   type="submit"
+                  isDisabled={isSubmitting}
                   className="rounded-md bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
                 >
-                  Create Account
+                  {isSubmitting ? "Creating account…" : "Create Account"}
                 </Button>
               </Field>
               <FieldSeparator>or</FieldSeparator>

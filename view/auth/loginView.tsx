@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { cn } from "@/lib"
+import { useRouter } from "next/navigation"
+import { cn, signin, AuthApiError, showNotification } from "@/lib"
 import { Button, Input } from "@heroui/react"
 import { FaEye, FaEyeSlash, FaGithub } from "react-icons/fa"
 import { FcGoogle } from "react-icons/fc"
@@ -14,7 +15,34 @@ import {
 import Link from "next/link"
 
 const LoginView = ({ className, ...props }: React.ComponentProps<"div">) => {
+  const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const email = String(formData.get("email") ?? "").trim()
+    const password = String(formData.get("password") ?? "")
+
+    setError("")
+    setIsSubmitting(true)
+    try {
+      await signin({ email, password })
+      router.push("/dashboard")
+    } catch (err) {
+      if (err instanceof AuthApiError && err.status === 403) {
+        window.localStorage.setItem("email", email)
+        showNotification({ type: "info", message: "Please verify your email first." })
+        router.push("/auth/verify")
+        return
+      }
+      setError(err instanceof AuthApiError ? err.message : "Something went wrong. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -26,13 +54,15 @@ const LoginView = ({ className, ...props }: React.ComponentProps<"div">) => {
           </p>
         </div>
         <div className="pt-3">
-          <form>
+          <form onSubmit={handleSubmit}>
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
                   placeholder="m@example.com"
                   className="h-9 w-full rounded-md"
                   required
@@ -51,7 +81,9 @@ const LoginView = ({ className, ...props }: React.ComponentProps<"div">) => {
                 <div className="relative w-full">
                   <Input
                     id="password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
                     placeholder="********"
                     className="h-9 w-full rounded-md pr-9"
                     required
@@ -72,12 +104,16 @@ const LoginView = ({ className, ...props }: React.ComponentProps<"div">) => {
                   </button>
                 </div>
               </Field>
+              {error ? (
+                <p className="-mt-2 text-sm text-destructive">{error}</p>
+              ) : null}
               <Field className="pb-4">
                 <Button
                   type="submit"
+                  isDisabled={isSubmitting}
                   className="rounded-md bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
                 >
-                  Login
+                  {isSubmitting ? "Signing in…" : "Login"}
                 </Button>
               </Field>
               <FieldSeparator>or</FieldSeparator>
