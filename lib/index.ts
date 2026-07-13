@@ -1,3 +1,5 @@
 export * from "./showNotification"
 export * from "./utils"
+export * from "./api-client"
 export * from "./auth"
+export * from "./companies"

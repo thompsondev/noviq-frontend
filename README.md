@@ -75,19 +75,19 @@ App runs at `http://localhost:3000`.
 ```
 app/                     # Next.js App Router routes (thin — renders view/ components)
 ├── auth/                # signin, signup, verify, forgot, reset
-├── dashboard/            # dashboard route
+├── dashboard/            # layout.tsx (session-gated sidebar shell), page.tsx, discover/page.tsx
 └── layout.tsx, page.tsx, not-found.tsx
 view/                    # Page-level view components (the actual UI/logic per route)
 ├── auth/                 # loginView, signupView, verifyView, forgotView, resetView
-└── dashboard/             # dashboardView
+└── dashboard/             # dashboardView, discoverView
 components/
 ├── ui/                    # shadcn/ui components
 └── theme-provider.tsx
-hooks/                   # Shared React hooks
-lib/                      # Shared utilities (index.ts, auth.ts, showNotification.ts, utils.ts)
+hooks/                   # Shared React hooks (useCurrentUser — session context for dashboard routes)
+lib/                      # Shared utilities: api-client.ts (fetch wrapper), auth.ts, companies.ts, showNotification.ts, utils.ts
 ```
 
-Routes in `app/` stay thin; page logic and layout live in the corresponding `view/` component.
+Routes in `app/` stay thin; page logic and layout live in the corresponding `view/` component. `app/dashboard/layout.tsx` checks the session on load and redirects to `/auth/signin` if there isn't one.
 
 ### Adding shadcn components
 
