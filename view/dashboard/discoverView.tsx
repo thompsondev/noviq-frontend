@@ -1,15 +1,24 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import {
   ApiError,
   listCompanies,
+  researchCompany,
   searchCompanies,
   showNotification,
   type Company,
+  type CompanyIntelligence,
 } from "@/lib"
 import { Button, Input } from "@heroui/react"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+
+interface ResearchState {
+  status: "loading" | "done" | "error"
+  intelligence?: CompanyIntelligence
+  cached?: boolean
+  error?: string
+}
 
 const DiscoverView = () => {
   const [companies, setCompanies] = useState<Company[]>([])
@@ -19,6 +28,8 @@ const DiscoverView = () => {
   // docs/12-roadmap.md) rather than waiting for a search to reveal that.
   const [sourceConfigured, setSourceConfigured] = useState(false)
   const [error, setError] = useState("")
+  const [research, setResearch] = useState<Record<string, ResearchState>>({})
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -78,6 +89,30 @@ const DiscoverView = () => {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.")
     } finally {
       setIsSearching(false)
+    }
+  }
+
+  const handleResearch = async (companyId: string) => {
+    setResearch((prev) => ({ ...prev, [companyId]: { status: "loading" } }))
+    try {
+      const result = await researchCompany(companyId)
+      setResearch((prev) => ({
+        ...prev,
+        [companyId]: {
+          status: "done",
+          intelligence: result.intelligence,
+          cached: result.cached,
+        },
+      }))
+      setExpandedId(companyId)
+    } catch (err) {
+      setResearch((prev) => ({
+        ...prev,
+        [companyId]: {
+          status: "error",
+          error: err instanceof ApiError ? err.message : "Research failed. Try again.",
+        },
+      }))
     }
   }
 
@@ -156,21 +191,99 @@ const DiscoverView = () => {
                   <th className="px-4 py-2 font-medium">Domain</th>
                   <th className="px-4 py-2 font-medium">Industry</th>
                   <th className="px-4 py-2 font-medium">Country</th>
+                  <th className="px-4 py-2 font-medium">Research</th>
                 </tr>
               </thead>
               <tbody>
-                {companies.map((company) => (
-                  <tr key={company.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2">{company.name}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{company.domain}</td>
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {company.industry ?? "—"}
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {company.country ?? "—"}
-                    </td>
-                  </tr>
-                ))}
+                {companies.map((company) => {
+                  const state = research[company.id]
+                  const isExpanded = expandedId === company.id && state?.intelligence
+
+                  return (
+                    <Fragment key={company.id}>
+                      <tr className="border-b border-border last:border-0">
+                        <td className="px-4 py-2">{company.name}</td>
+                        <td className="px-4 py-2 text-muted-foreground">{company.domain}</td>
+                        <td className="px-4 py-2 text-muted-foreground">
+                          {company.industry ?? "—"}
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">
+                          {company.country ?? "—"}
+                        </td>
+                        <td className="px-4 py-2">
+                          {!state || state.status === "error" ? (
+                            <button
+                              type="button"
+                              onClick={() => handleResearch(company.id)}
+                              className="cursor-pointer font-medium text-foreground underline-offset-2 hover:underline"
+                              title={state?.error}
+                            >
+                              {state?.status === "error" ? "Failed — Retry" : "Research"}
+                            </button>
+                          ) : state.status === "loading" ? (
+                            <span className="text-muted-foreground">Researching…</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedId((prev) => (prev === company.id ? null : company.id))
+                              }
+                              className="cursor-pointer font-medium text-foreground underline-offset-2 hover:underline"
+                            >
+                              {state.intelligence?.status === "insufficient_data"
+                                ? "Insufficient data"
+                                : isExpanded
+                                  ? "Hide details"
+                                  : "View details"}
+                              {state.cached ? " (cached)" : ""}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {isExpanded ? (
+                        <tr className="border-b border-border bg-muted/40 last:border-0">
+                          <td colSpan={5} className="px-4 py-3 text-sm">
+                            <div className="flex flex-col gap-2">
+                              {state.intelligence!.summary ? (
+                                <p>{state.intelligence!.summary}</p>
+                              ) : null}
+                              {state.intelligence!.products.length ? (
+                                <p>
+                                  <span className="font-medium">Products: </span>
+                                  {state.intelligence!.products.join(", ")}
+                                </p>
+                              ) : null}
+                              {state.intelligence!.pricing ? (
+                                <p>
+                                  <span className="font-medium">Pricing: </span>
+                                  {state.intelligence!.pricing}
+                                </p>
+                              ) : null}
+                              {state.intelligence!.competitors.length ? (
+                                <p>
+                                  <span className="font-medium">Competitors: </span>
+                                  {state.intelligence!.competitors.join(", ")}
+                                </p>
+                              ) : null}
+                              {state.intelligence!.techStack.length ? (
+                                <p>
+                                  <span className="font-medium">Tech stack: </span>
+                                  {state.intelligence!.techStack.join(", ")}
+                                </p>
+                              ) : null}
+                              {state.intelligence!.painPoints.length ? (
+                                <p>
+                                  <span className="font-medium">Pain points: </span>
+                                  {state.intelligence!.painPoints.join(", ")}
+                                </p>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
