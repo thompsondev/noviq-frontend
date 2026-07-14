@@ -3,12 +3,14 @@
 import { Fragment, useEffect, useState } from "react"
 import {
   ApiError,
+  generateEmailAsset,
   listCompanies,
   researchCompany,
   searchCompanies,
   showNotification,
   type Company,
   type CompanyIntelligence,
+  type GeneratedAsset,
 } from "@/lib"
 import { Button, Input } from "@heroui/react"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -17,6 +19,12 @@ interface ResearchState {
   status: "loading" | "done" | "error"
   intelligence?: CompanyIntelligence
   cached?: boolean
+  error?: string
+}
+
+interface EmailState {
+  status: "loading" | "done" | "error"
+  asset?: GeneratedAsset
   error?: string
 }
 
@@ -30,6 +38,7 @@ const DiscoverView = () => {
   const [error, setError] = useState("")
   const [research, setResearch] = useState<Record<string, ResearchState>>({})
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [emails, setEmails] = useState<Record<string, EmailState>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -111,6 +120,22 @@ const DiscoverView = () => {
         [companyId]: {
           status: "error",
           error: err instanceof ApiError ? err.message : "Research failed. Try again.",
+        },
+      }))
+    }
+  }
+
+  const handleGenerateEmail = async (companyId: string) => {
+    setEmails((prev) => ({ ...prev, [companyId]: { status: "loading" } }))
+    try {
+      const asset = await generateEmailAsset(companyId)
+      setEmails((prev) => ({ ...prev, [companyId]: { status: "done", asset } }))
+    } catch (err) {
+      setEmails((prev) => ({
+        ...prev,
+        [companyId]: {
+          status: "error",
+          error: err instanceof ApiError ? err.message : "Generation failed. Try again.",
         },
       }))
     }
@@ -276,6 +301,46 @@ const DiscoverView = () => {
                                   <span className="font-medium">Pain points: </span>
                                   {state.intelligence!.painPoints.join(", ")}
                                 </p>
+                              ) : null}
+
+                              {state.intelligence!.status === "completed" ? (
+                                <div className="mt-2 border-t border-border pt-3">
+                                  {(() => {
+                                    const emailState = emails[company.id]
+                                    if (!emailState || emailState.status === "error") {
+                                      return (
+                                        <div className="flex flex-col gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleGenerateEmail(company.id)}
+                                            className="w-fit cursor-pointer rounded-md border border-border bg-background px-3 py-1.5 font-medium text-foreground hover:bg-accent"
+                                          >
+                                            {emailState?.status === "error"
+                                              ? "Failed — Retry generating email"
+                                              : "Generate Email"}
+                                          </button>
+                                          {emailState?.error ? (
+                                            <p className="text-destructive">{emailState.error}</p>
+                                          ) : null}
+                                        </div>
+                                      )
+                                    }
+                                    if (emailState.status === "loading") {
+                                      return <p className="text-muted-foreground">Generating email…</p>
+                                    }
+                                    return (
+                                      <div className="flex flex-col gap-1">
+                                        <p>
+                                          <span className="font-medium">Subject: </span>
+                                          {emailState.asset?.subject}
+                                        </p>
+                                        <p className="whitespace-pre-wrap text-muted-foreground">
+                                          {emailState.asset?.body}
+                                        </p>
+                                      </div>
+                                    )
+                                  })()}
+                                </div>
                               ) : null}
                             </div>
                           </td>
